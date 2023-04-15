@@ -10,17 +10,104 @@ output: html_document
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 library(tidyverse)
 library(rvest)
+library(tm)
 ```
 
 ### **Data Import and Cleaning**
 ```{r}
-io_psych_html <- read_html("https://www.reddit.com/r/IOPsychology/")
+io_psych_html <- "https://old.reddit.com/r/IOPsychology/top/?sort=top&t=year"
 
-io_psych_html %>%
-  html_elements(xpath = '..//div[span[text() = "Posted by"]]/../..') %>% 
-  html_elements(xpath = 'following-sibling::div[@data-adclicklocation = "title"]') %>% 
-  html_elements(xpath = '..//h3[@class = "_eYtD2XCVieq6emjKBH3m"]') %>%
-  html_text()
+num_pages <- 100
+title <- c()
+upvotes <- c()
+
+# Loop through each page and scrape the relevant information
+for (i in 1:num_pages) {
+  if (i == 1){
+  # Scrape the HTML content of the current page
+  page_html <- read_html(io_psych_html)
+    
+  # Extract the titles and scores of the top posts using CSS selectors
+  titles <- page_html %>% 
+      ## To screen out advertisement posts, I only selected the posts that are "submitted" by users rather than "promoted"
+      html_elements(xpath = '//div[p[text() = "submitted "]]') %>%
+      ## Selected the title class where the titles are stored in
+      html_elements(xpath = 'p[@class = "title"]/a') %>%
+      ## Extracted the title text from the class
+      html_text()
+    
+   upvote <- page_html %>%
+  ## Same as above, # To screen out advertisement posts, I only selected the posts that are "submitted" by users rather than "promoted"
+     html_elements(xpath = '//div[p[text() = "submitted "]]') %>%
+  ## Went up to the parent (entry unvoted) of the div class that "submitted" was stored in (top matter), and then selected the preceding sibling (midcol unvoted) of the parent  
+     html_elements(xpath = '..//preceding-sibling::div[@class = "midcol unvoted"]') %>%
+  ## Selected the upvotes from the midcol unvoted div class
+     html_elements(xpath = 'div[@class = "score unvoted"]') %>%
+  ## Extracted the upvotes characters from the score unvoted class
+     html_text() %>%
+  ## Converted them into numeric values for later analyses
+     as.numeric() %>%
+  ## Replace NA with 0 
+     replace_na(0)
+   
+  # Append the scraped data to the respective lists
+  title <- c(title, titles)
+  upvotes <- c(upvotes, upvote)
+    
+    # Extract the "after" ID from the last post on the page
+    after_id <- page_html %>%
+      html_elements(xpath = '..//div[@data-fullname]') %>%
+      html_attr("data-fullname") %>%
+      last()
+    
+    Sys.sleep(3)
+  } else {
+    
+  page_url <- paste0(io_psych_html, "&count=", (2-1)*25, "&after=", after_id)
+  
+  # Scrape the HTML content of the current page
+  page_html <- read_html(io_psych_html)
+  
+  # Extract the titles and scores of the top posts using CSS selectors
+  titles <- page_html %>% 
+    ## To screen out advertisement posts, I only selected the posts that are "submitted" by users rather than "promoted"
+    html_elements(xpath = '//div[p[text() = "submitted "]]') %>%
+    ## Selected the title class where the titles are stored in
+    html_elements(xpath = 'p[@class = "title"]/a') %>%
+    ## Extracted the title text from the class
+    html_text()
+  
+  upvote <- page_html %>%
+  ## Same as above, # To screen out advertisement posts, I only selected the posts that are "submitted" by users rather than "promoted"
+     html_elements(xpath = '//div[p[text() = "submitted "]]') %>%
+  ## Went up to the parent (entry unvoted) of the div class that "submitted" was stored in (top matter), and then selected the preceding sibling (midcol unvoted) of the parent  
+     html_elements(xpath = '..//preceding-sibling::div[@class = "midcol unvoted"]') %>%
+  ## Selected the upvotes from the midcol unvoted div class
+     html_elements(xpath = 'div[@class = "score unvoted"]') %>%
+  ## Extracted the upvotes characters from the score unvoted class
+     html_text() %>%
+  ## Converted them into numeric values for later analyses
+     as.numeric() %>%
+  ## Replace NA with 0 
+     replace_na(0)
+     
+  # Append the scraped data to the respective lists
+  title <- c(title, titles)
+  upvotes <- c(upvotes, upvote)
+  
+  after_id <- page_html %>%
+    html_elements(xpath = '..//div[@data-fullname]') %>%
+    html_attr("data-fullname") %>%
+    last() 
+  
+  Sys.sleep(3)
+  }
+}
+
+week12_tbl <- tibble(title, upvotes)
+write.csv(week12_tbl, "../data/week12_tbl.csv", row.names = F)
+
+week12_tbl <- read.csv("../data/week12_tbl.csv")
 ```
 
 
