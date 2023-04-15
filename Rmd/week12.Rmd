@@ -5,18 +5,23 @@ date: "2023-04-14"
 output: html_document
 ---
 
-#
+### **Script Settings and Resources**
 ```{r setup}
-knitr::opts_chunk$set(echo = TRUE)
+setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+library(tidyverse)
+library(rvest)
 ```
 
+### **Data Import and Cleaning**
+```{r}
+io_psych_html <- read_html("https://www.reddit.com/r/IOPsychology/")
 
-```{r cars}
-summary(cars)
+io_psych_html %>%
+  html_elements(xpath = '..//div[span[text() = "Posted by"]]/../..') %>% 
+  html_elements(xpath = 'following-sibling::div[@data-adclicklocation = "title"]') %>% 
+  html_elements(xpath = '..//h3[@class = "_eYtD2XCVieq6emjKBH3m"]') %>%
+  html_text()
 ```
 
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
 
 
