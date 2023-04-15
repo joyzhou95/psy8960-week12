@@ -1,0 +1,22 @@
+---
+title: "week12.Rmd"
+author: "Joy Zhou"
+date: "2023-04-14"
+output: html_document
+---
+
+#
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r cars}
+summary(cars)
+```
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+
