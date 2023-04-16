@@ -125,10 +125,19 @@ io_corpus <- io_corpus_original %>%
   tm_map(removeWords, c(io_stem, psych_stem)) %>%
   tm_map(stripWhitespace) %>%
   lemmatize_words() 
+
+compare_them <- function(corpus_1, corpus_2){
+  sample_num <- sample(nrow(week12_tbl), 1)
+  compare <- list(corpus_1[[sample_num]]$content, corpus_2[[sample_num]]$content)
+  return(compare)
+}
+
+compare_them(io_corpus, io_corpus_original)
 ```
 
 ### Analysis
 ```{r}
+
 
 ```
 
