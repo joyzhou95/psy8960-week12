@@ -5,19 +5,21 @@ date: "2023-04-14"
 output: html_document
 ---
 
-### **Script Settings and Resources**
+### Script Settings and Resources
 ```{r setup}
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 library(tidyverse)
 library(rvest)
 library(tm)
+library(qdap)
+library(textstem)
 ```
 
-### **Data Import and Cleaning**
+### Data Import and Cleaning
 ```{r}
-io_psych_html <- "https://old.reddit.com/r/IOPsychology/top/?sort=top&t=year"
+io_psych_html <- "https://old.reddit.com/r/IOPsychology/top/?t=year"
 
-num_pages <- 100
+num_pages <- 30
 title <- c()
 upvotes <- c()
 
@@ -62,11 +64,10 @@ for (i in 1:num_pages) {
     
     Sys.sleep(3)
   } else {
-    
-  page_url <- paste0(io_psych_html, "&count=", (2-1)*25, "&after=", after_id)
+  page_url <- paste0(io_psych_html, "&count=", (i-1)*25, "&after=", after_id)
   
   # Scrape the HTML content of the current page
-  page_html <- read_html(io_psych_html)
+  page_html <- read_html(page_url)
   
   # Extract the titles and scores of the top posts using CSS selectors
   titles <- page_html %>% 
@@ -108,7 +109,29 @@ week12_tbl <- tibble(title, upvotes)
 write.csv(week12_tbl, "../data/week12_tbl.csv", row.names = F)
 
 week12_tbl <- read.csv("../data/week12_tbl.csv")
+
+io_corpus_original <- VCorpus(VectorSource(week12_tbl[,1]))
+
+io_stem <- c("io", "i/o")
+psych_stem <- c("psychology", "psychologist", "psychologists", "psych")
+##to_lower needs to be after contraction as the latter capitalizes the first letter in a sentence
+io_corpus <- io_corpus_original %>%
+  tm_map(content_transformer(replace_abbreviation)) %>%
+  tm_map(content_transformer(replace_contraction)) %>%
+  tm_map(content_transformer(str_to_lower)) %>%
+  tm_map(removePunctuation) %>%
+  tm_map(removeNumbers) %>%
+  tm_map(removeWords, stopwords("en")) %>%
+  tm_map(removeWords, c(io_stem, psych_stem)) %>%
+  tm_map(stripWhitespace) %>%
+  lemmatize_words() 
 ```
+
+### Analysis
+```{r}
+
+```
+
 
 
 
