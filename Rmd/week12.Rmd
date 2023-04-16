@@ -13,6 +13,7 @@ library(rvest)
 library(tm)
 library(qdap)
 library(textstem)
+library(RWeka)
 ```
 
 ### Data Import and Cleaning
@@ -133,6 +134,20 @@ compare_them <- function(corpus_1, corpus_2){
 }
 
 compare_them(io_corpus, io_corpus_original)
+
+bi_token <- function(x){
+  NGramTokenizer(x, Weka_control(min = 2, max = 2))
+}
+
+io_dtm <- DocumentTermMatrix(
+  io_corpus, 
+  control = list(tokenizer = bi_token)
+)
+
+io_slim_dtm1 <- removeSparseTerms(io_dtm, 0.998)
+
+tokenCounts <- apply(io_slim_dtm , 1, sum)
+io_slim_dtm <- io_slim_dtm1[tokenCounts > 0, ]
 ```
 
 ### Analysis
