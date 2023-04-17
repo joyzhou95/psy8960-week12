@@ -18,6 +18,9 @@ library(ldatuning)
 library(parallel)
 library(doParallel)
 library(topicmodels)
+library(tidytext)
+library(wordcloud)
+library(stats)
 ```
 
 ### Data Import and Cleaning
@@ -151,7 +154,7 @@ io_dtm <- DocumentTermMatrix(
 
 io_slim_dtm1 <- removeSparseTerms(io_dtm, 0.998)
 
-tokenCounts <- apply(io_slim_dtm , 1, sum)
+tokenCounts <- apply(io_slim_dtm1, 1, sum)
 io_slim_dtm <- io_slim_dtm1[tokenCounts > 0, ]
 ```
 
@@ -174,6 +177,49 @@ FindTopicsNumber_plot(io_tuning)
 stopCluster(cluster)
 registerDoSEQ()
 
+lda_results <- LDA(io_slim_dtm, 9)
+
+lda_betas <- tidy(lda_results, matrix = "beta")
+lda_gammas <- tidy(lda_results, matrix = "gamma")
+
+lda_betas %>%
+  group_by(topic) %>%
+  top_n(10, beta) %>%
+  arrange(topic) %>%
+  view()
+
+lda_gammas_selected <- lda_gammas %>%
+  group_by(document) %>%
+  top_n(1, gamma) %>%
+  slice(1) %>%
+  ungroup %>%
+  mutate(doc_id = as.numeric(document),
+         probability = gamma) %>%
+  arrange(document) %>%
+  select(-document, -gamma)
+
+doc_id <- c(1:nrow(week12_tbl))
+original <- week12_tbl$title
+
+doc_title_tibble <- tibble(doc_id, original)
+
+topics_tbl <- doc_title_tibble %>%
+  left_join(lda_gammas_selected, by = "doc_id")
+
+slim_dtm_df <- as_tibble(as.matrix(io_slim_dtm))
+
+wordcounts <- colSums(slim_dtm_df)
+wordnames <- names(slim_dtm_df)
+
+wordcloud(wordnames, wordcounts, max.words = 50, scale = c(2, .5))
+
+week12_tbl_num <- week12_tbl %>%
+  mutate(doc_id = as.numeric(1:nrow(week12_tbl)))
+
+final_tbl <- topics_tbl %>%
+  left_join(week12_tbl_num, by = "doc_id")
+
+oneway.test(upvotes ~ topic, data = final_tbl)
 ```
 
 
