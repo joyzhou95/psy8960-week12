@@ -6,7 +6,7 @@ output: html_document
 ---
 
 ### Script Settings and Resources
-```{r setup}
+```{r, message=F}
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 library(tidyverse)
 library(rvest)
@@ -25,15 +25,15 @@ library(stats)
 
 ### Data Import and Cleaning
 ```{r}
-io_psych_html <- "https://old.reddit.com/r/IOPsychology/top/?t=year"
+io_psych_html <- "https://old.reddit.com/r/IOPsychology/"
 
-num_pages <- 30
+num_pages <- 50
 title <- c()
 upvotes <- c()
 
 # Loop through each page and scrape the relevant information
 for (i in 1:num_pages) {
-  if (i == 1){
+  if(i == 1 ){
   # Scrape the HTML content of the current page
   page_html <- read_html(io_psych_html)
     
@@ -72,7 +72,7 @@ for (i in 1:num_pages) {
     
     Sys.sleep(3)
   } else {
-  page_url <- paste0(io_psych_html, "&count=", (i-1)*25, "&after=", after_id)
+  page_url <- paste0(io_psych_html, "?&count=", (i-1)*25, "&after=", after_id)
   
   # Scrape the HTML content of the current page
   page_html <- read_html(page_url)
@@ -125,15 +125,15 @@ psych_stem <- c("psychology", "psychologist", "psychologists", "psych")
 ##to_lower needs to be after contraction as the latter capitalizes the first letter in a sentence
 io_corpus <- io_corpus_original %>%
   tm_map(content_transformer(str_replace_all), pattern = "’", replacement = "'") %>%
+  tm_map(content_transformer(str_remove), pattern = "‘|“|”|—") %>%
   tm_map(content_transformer(replace_abbreviation)) %>%
   tm_map(content_transformer(replace_contraction)) %>%
   tm_map(content_transformer(str_to_lower)) %>%
   tm_map(removePunctuation) %>%
   tm_map(removeNumbers) %>%
-  tm_map(removeWords, stopwords("en")) %>%
-  tm_map(removeWords, c(io_stem, psych_stem)) %>%
+  tm_map(removeWords, c(io_stem, psych_stem, "iopsychology")) %>%
   tm_map(stripWhitespace) %>%
-  lemmatize_words() 
+  lemmatize_words()
 
 compare_them <- function(corpus_1, corpus_2){
   sample_num <- sample(nrow(week12_tbl), 1)
