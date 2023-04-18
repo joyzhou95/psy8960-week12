@@ -26,7 +26,6 @@ library(stats)
 
 ### Data Import and Cleaning
 ```{r}
-
 #io_psych_url <- find_thread_urls(
   #subreddit = "IOPsychology",
   #period = "year",
@@ -100,6 +99,7 @@ io_tuning <- FindTopicsNumber(
               "Deveaud2014"),
   verbose = T
 )
+
 FindTopicsNumber_plot(io_tuning)
 
 stopCluster(cluster)
@@ -134,12 +134,31 @@ doc_title_tibble <- tibble(doc_id, original)
 topics_tbl <- doc_title_tibble %>%
   left_join(lda_gammas_selected, by = "doc_id")
 
+# Using the beta matrix alone, what topics would you conclude your final topic list maps onto?
+## Topic 1 seems to be about research and analysis
+## Topic 2 seems to be about learning and education
+## Topic 3 seems to be about reading and discussion 
+## Topic 4 seems to be about job advice 
+## Topic 5 seems to be about practical recommendations 
+## Topic 6 seems to be about career choices for phd and master students
+## Topic 7 seems to be about siop conference
+## Topic 8 seems to be about advice for working in people analytics
+## Topic 9 seems to be about general questions about graduate school, research, and work 
+
+# Look at the original text of documents with the highest and lowest probabilities assigned to each document. Do your topic names derived from your interpretation of the beta matrix conceptually match with the content of the original posts? What kind of validity evidence does your answer to this question represent?
+
+## Overall speaking, I think the post content matches pretty well with my topic names. For example, all the weekly discussion posts were categorized under Topic 3, which I named as reading and discussion. Take another example, post 88, which asked for thoughts on the use of personality tests for selection, had the highest probability for Topic 5, which I summarized as practical recommendations. However, there are also some posts that did not fit into the general topic, such as post 802, which was about executive coaching career advice, yet it had the highest probability for Topic 7, which I named as siop conference. 
+## And the answer to this question would provide evidence for content validity. 
+
+
 slim_dtm_df <- as_tibble(as.matrix(io_slim_dtm))
 
 wordcounts <- colSums(slim_dtm_df)
 wordnames <- names(slim_dtm_df)
 
 wordcloud(wordnames, wordcounts, max.words = 50, scale = c(2, .5))
+
+##Looking at the wordcloud generated from the post data, it seems that work, research, and career appeared most frequently in all the posts. Moreover, there are many words that are related to asking for advice (e.g., question, help, advice), suggesting that people like to ask questions and seek advice about career choices and io-related research on the IO Psychology subreddit. 
 
 week12_tbl_num <- week12_tbl %>%
   mutate(doc_id = as.numeric(1:nrow(week12_tbl)))
@@ -148,6 +167,8 @@ final_tbl <- topics_tbl %>%
   left_join(week12_tbl_num, by = "doc_id")
 
 oneway.test(upvotes ~ topic, data = final_tbl)
+
+# The one-way ANOVA test indicates a significant effect of topic on the number of upvotes (p < 0.05), thus suggesting that the number of upvotes does differ by topic. 
 ```
 
 
