@@ -15,9 +15,8 @@ library(tm)
 library(qdap)
 library(textstem)
 library(RWeka)
-library(ldatuning)
-library(parallel)
 library(doParallel)
+library(ldatuning)
 library(topicmodels)
 library(tidytext)
 library(wordcloud)
@@ -25,29 +24,49 @@ library(stats)
 ```
 
 ### Data Import and Cleaning
-```{r}
-#io_psych_url <- find_thread_urls(
-  #subreddit = "IOPsychology",
-  #period = "year",
-  #sort_by = "new"
-#)
+```{r data import}
+# Created the url that contains the posts of IO Psychology subreddit from the past year
+## io_psych_url <- find_thread_urls(
+  ## subreddit = "IOPsychology",
+  ## period = "year",
+  ## sort_by = "new"
+## )
 
-#io_psych_content <- get_thread_content(io_psych_url$url)
+# Get the thread content and post information from the url created 
+## io_psych_content <- get_thread_content(io_psych_url$url)
 
-#title <- io_psych_content$threads$title
-#upvotes <- io_psych_content$threads$upvotes
+# Extract the list of title from the content list 
+## title <- io_psych_content$threads$title
 
-#week12_tbl <- tibble(title, upvotes)
+# Extract the list of upvotes from the content list 
+## upvotes <- io_psych_content$threads$upvotes
 
-#write.csv(week12_tbl, "../data/week12_tbl.csv", row.names = F)
+# Create a dataframe consisted of the title and upvotes variables 
+## week12_tbl <- tibble(title, upvotes)
 
-week12_tbl <- read.csv("../data/week12_tbl.csv")
+# Save the dataframe as a csv file in the data folder 
+## write_csv(week12_tbl, "../data/week12_tbl.csv") 
 
-io_corpus_original <- VCorpus(VectorSource(week12_tbl[,1]))
+# Import the created data file
+week12_tbl <- read_csv("../data/week12_tbl.csv")
+```
 
-io_stem <- c("io", "i/o")
-psych_stem <- c("psychology", "psychologist", "psychologists", "psych")
-##to_lower needs to be after contraction as the latter capitalizes the first letter in a sentence
+```{r pre-processing}
+# Convert the dataframe into a corpus object 
+io_corpus_original <- VCorpus(VectorSource(week12_tbl$title))
+
+# Specify the stem words related to IO psychology, I choose to specify them separately so that I don't need to type all the possible combinations of these words 
+io_stem <- c("io", "i", "o")
+psych_stem <- c("psychology", "psychologist", "psychologists", "psych", "psyc")
+
+# Before the standard pre-processing steps, I cleaned up the posts a bit to prepare them for pre-processing: 
+# 1. I kept only one type of apostrophes so that they would be detected by the replace_contraction function. 
+# 2. I replaced hyphens with space so the words before and after the symbols would be detected as two words. 
+# 3. I removed all the quotes so that words would not be detected as unique words just because they had quotes around them 
+# For pre-processing, I first replaced abbreviation and contraction to revert those words to their original forms (e.g., i'm to i am) for further processing. Then I converted all strings to lower cases as we need to remove all stop words later and all the stop words are in lower cases. Moreover, str_to_lower needs to be after contraction as the latter capitalizes the first letter in a sentence. 
+# After that, I removed punctuation and numbers in all the strings so that we only left with words in all strings, which makes it easier for removing stop words
+# In the next step, I removed all the stop words and words related to io psychology, as well as removing all the white spaces that resulted from deletions in previous steps 
+# Lastly, I used lemmatization to convert all inflected words into their original forms 
 io_corpus <- io_corpus_original %>%
   tm_map(content_transformer(str_replace_all), pattern = "’", replacement = "'") %>%
   tm_map(content_transformer(str_replace_all), pattern = "-|/", replacement = " ") %>%
@@ -58,119 +77,159 @@ io_corpus <- io_corpus_original %>%
   tm_map(removePunctuation) %>%
   tm_map(removeNumbers) %>%
   tm_map(removeWords, stopwords("en")) %>%
+  # In addition to the stem words I defined before the pre-processing, I also added riopsychology and io psychology as they are also the variants of io psychology 
   tm_map(removeWords, c(io_stem, psych_stem, "iopsychology", "riopsychology")) %>%
   tm_map(stripWhitespace) %>%
   tm_map(content_transformer(lemmatize_strings))
 
+# Create a function that outputs two random rows from two corpus objects, first obtain a row number of the original dataframe, then display the corresponding rows from the two input corpus objects 
 compare_them <- function(corpus_1, corpus_2){
   sample_num <- sample(nrow(week12_tbl), 1)
   compare <- list(corpus_1[[sample_num]]$content, corpus_2[[sample_num]]$content)
   return(compare)
 }
 
+# Run the function several times to examine the results of preprocessing 
 compare_them(io_corpus, io_corpus_original)
 
+```
+
+```{r tokenization}
+# Write a function for creating uni- and bi-gram objects  
 bi_token <- function(x){
   NGramTokenizer(x, Weka_control(min = 1, max = 2))
 }
 
+# Convert the corpus object into a matrix that contains one- and two-words variables 
 io_dtm <- DocumentTermMatrix(
   io_corpus, 
   control = list(tokenizer = bi_token)
 )
 
+# Remove the variables that appeared in a very small number of documents to reach a n/k ratio between 2:1 and 3:1
 io_slim_dtm <- removeSparseTerms(io_dtm, 0.996)
 
+# Remove the documents (rows) that became empty strings after pre-processing 
 tokenCounts <- apply(io_slim_dtm, 1, sum)
 io_slim_dtm_complete <- io_slim_dtm[tokenCounts > 0, ]
 ```
 
 ### Analysis
-```{r}
+```{r LDA modeling}
+# Create clusters to run the latent Dirichlet allocation model with parallelization 
 cluster <- makeCluster(7)
 registerDoParallel(cluster)
 
+# Run the LDA model with cleaned datamframe to estimate the number of topics in the current dataset  
 io_tuning <- FindTopicsNumber(
   io_slim_dtm_complete,
-  topics = seq(3,15,3),
+  topics = seq(3,15,1),
   metrics = c("Griffiths2004",
               "CaoJuan2009",
               "Arun2010",
               "Deveaud2014"),
   verbose = T
 )
-
+# Plot the LDA model output to find the appropriate number of topics
 FindTopicsNumber_plot(io_tuning)
 
+# Stop clustering 
 stopCluster(cluster)
 registerDoSEQ()
 
+# Check the model output
+io_tuning
+```
+
+```{r topic modeling}
+# I chose to go with 9 topics given it has a relatively small values for the Arun (2010) and CaoJuan(2009) indices and relatively larger values for the Griffiths (2004) and Deveaud (2014) indices
 lda_results <- LDA(io_slim_dtm_complete, 9)
 
+# Create the beta and gamme matrices to examine the probabilities of each word and document belonging to each of the topics 
 lda_betas <- tidy(lda_results, matrix = "beta")
 lda_gammas <- tidy(lda_results, matrix = "gamma")
 
+# Take a look at top 15 words in each topic arranged by probabilities to understand the meaning of each topic
 lda_betas %>%
   group_by(topic) %>%
   top_n(15, beta) %>%
   arrange(topic) %>%
   view()
 
+# Create a dataframe that presents the most probable topic for each document 
 lda_gammas_selected <- lda_gammas %>%
   group_by(document) %>%
   top_n(1, gamma) %>%
   slice(1) %>%
   ungroup %>%
-  mutate(doc_id = as.numeric(document),
-         probability = gamma) %>%
-  arrange(document) %>%
-  select(-document, -gamma)
+  # Rename the document columns to match the names of the original dataset so that the two dataframes can be merged 
+  rename(doc_id = document, probability = gamma) %>%
+  # Arrange the dataframe by doc_id
+  arrange(doc_id) %>%
+  # Convert the doc_id to numeric so that it has the same data type as the doc_id in week12_tbl
+  mutate(doc_id = as.numeric(doc_id))
 
+# Create doc_id that contains the id number of all the posts 
 doc_id <- c(1:nrow(week12_tbl))
+
+# Extract the post titles from the original dataframe
 original <- week12_tbl$title
 
+# Create a dataframe that contains post id and titles 
 doc_title_tibble <- tibble(doc_id, original)
 
+# Create the topics_tbl by merging the id and title variables with the gamma matrix 
 topics_tbl <- doc_title_tibble %>%
   left_join(lda_gammas_selected, by = "doc_id")
+``` 
 
+```{r Questions}
 # Using the beta matrix alone, what topics would you conclude your final topic list maps onto?
-## Topic 1 seems to be about research and analysis
-## Topic 2 seems to be about learning and education
-## Topic 3 seems to be about reading and discussion 
-## Topic 4 seems to be about job advice 
-## Topic 5 seems to be about practical recommendations 
-## Topic 6 seems to be about career choices for phd and master students
-## Topic 7 seems to be about siop conference
-## Topic 8 seems to be about advice for working in people analytics
-## Topic 9 seems to be about general questions about graduate school, research, and work 
+## Topic 1: research and analysis
+## Topic 2: learning and education
+## Topic 3: reading and discussion 
+## Topic 4: job advice 
+## Topic 5: practical recommendations 
+## Topic 6: career choices for phd and master students
+## Topic 7: siop conference
+## Topic 8: advice for working in people analytics
+## Topic 9: general questions about graduate school, research, and work 
 
 # Look at the original text of documents with the highest and lowest probabilities assigned to each document. Do your topic names derived from your interpretation of the beta matrix conceptually match with the content of the original posts? What kind of validity evidence does your answer to this question represent?
 
 ## Overall speaking, I think the post content matches pretty well with my topic names. For example, all the weekly discussion posts were categorized under Topic 3, which I named as reading and discussion. Take another example, post 88, which asked for thoughts on the use of personality tests for selection, had the highest probability for Topic 5, which I summarized as practical recommendations. However, there are also some posts that did not fit into the general topic, such as post 802, which was about executive coaching career advice, yet it had the highest probability for Topic 7, which I named as siop conference. 
 ## And the answer to this question would provide evidence for content validity. 
+```
 
-
-slim_dtm_df <- as_tibble(as.matrix(io_slim_dtm))
-
-wordcounts <- colSums(slim_dtm_df)
-wordnames <- names(slim_dtm_df)
-
-wordcloud(wordnames, wordcounts, max.words = 50, scale = c(2, .5))
-
-##Looking at the wordcloud generated from the post data, it seems that work, research, and career appeared most frequently in all the posts. Moreover, there are many words that are related to asking for advice (e.g., question, help, advice), suggesting that people like to ask questions and seek advice about career choices and io-related research on the IO Psychology subreddit. 
-
+```{r ANOVA}
+# Create a new dataframe that consisted of the original dataframe and a doc_id column
 week12_tbl_num <- week12_tbl %>%
   mutate(doc_id = as.numeric(1:nrow(week12_tbl)))
 
+# Create the final_tbl by merging the topics_tbl with the dataframe created in the last step so that the final_tbl includes everything in the topics_tbl and the upvotes variable
 final_tbl <- topics_tbl %>%
   left_join(week12_tbl_num, by = "doc_id")
 
+# Conduct an one-way ANOVA test to examine whether the number of upvotes differs by topics 
 oneway.test(upvotes ~ topic, data = final_tbl)
 
 # The one-way ANOVA test indicates a significant effect of topic on the number of upvotes (p < 0.05), thus suggesting that the number of upvotes does differ by topic. 
 ```
 
+### Visualization
+```{r wordcloud}
+# Convert the cleaned dtm to tibble for calculating column means and extracting column names
+slim_dtm_df <- as_tibble(as.matrix(io_slim_dtm))
 
+# Count the word frequencies by taking the sums of all columns
+wordcounts <- colSums(slim_dtm_df)
 
+# Extract all the words in the dataset
+wordnames <- names(slim_dtm_df)
 
+# Created with a wordcloud of the posts with a maximum of 50 words displayed, also adjusted the scale so that all words could fit into the plot 
+wordcloud(wordnames, wordcounts, max.words = 50, scale = c(2, .5))
+
+##Looking at the wordcloud generated from the post data, it seems that work, research, and career appeared most frequently in all the posts. Moreover, there are many words that are related to asking for advice (e.g., question, help, advice), suggesting that people like to ask questions and seek advice about career choices and io-related research on the IO Psychology subreddit. 
+
+```
